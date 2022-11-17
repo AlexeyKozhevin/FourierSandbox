@@ -1,0 +1,15 @@
+{
+  "files": {
+    "main.css": "/fouriersandbox/static/css/main.073c9b0a.css",
+    "main.js": "/fouriersandbox/static/js/main.ed5b1863.js",
+    "static/js/787.9bdaaf47.chunk.js": "/fouriersandbox/static/js/787.9bdaaf47.chunk.js",
+    "index.html": "/fouriersandbox/index.html",
+    "main.073c9b0a.css.map": "/fouriersandbox/static/css/main.073c9b0a.css.map",
+    "main.ed5b1863.js.map": "/fouriersandbox/static/js/main.ed5b1863.js.map",
+    "787.9bdaaf47.chunk.js.map": "/fouriersandbox/static/js/787.9bdaaf47.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.073c9b0a.css",
+    "static/js/main.ed5b1863.js"
+  ]
+}
