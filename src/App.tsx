@@ -104,7 +104,7 @@ export class AppContextType {
 
     constructor() {
         this.nPoints = 1024
-        this.functions = [hat, square, linear]
+        this.functions = [triangle, square, linear, Math.sin, Math.cos]
 
         makeObservable(this, {
             funcIndex : observable,
@@ -138,7 +138,7 @@ export const AppContextProvider = (props: AppContextProps) : JSX.Element => {
     )
 }
 
-function hat(x : number) : number {
+function triangle(x : number) : number {
     if (x < - Math.PI / 2) {
         return 0
     }
@@ -183,9 +183,11 @@ function FunctionRadioGroup() {
             name="radio-buttons-group"
             onChange={(event) => {context.setFunc(Number(event.target.value))}}
         >
-            <FormControlLabel value='0' control={<Radio />} label="hat" />
+            <FormControlLabel value='0' control={<Radio />} label="triangle" />
             <FormControlLabel value='1' control={<Radio />} label="square" />
             <FormControlLabel value='2' control={<Radio />} label="linear" />
+            <FormControlLabel value='3' control={<Radio />} label="sin" />
+            <FormControlLabel value='4' control={<Radio />} label="cos" />
         </RadioGroup>
         </FormControl>
 }
@@ -207,7 +209,7 @@ const Plot = observer((props : {nCoefs : number}): JSX.Element => {
         datasets: [
             {
                 data: context.func.values,
-                label: "Hat function",
+                label: "Target function",
                 borderColor: "#3333ff",
                 fill: true,
                 lineTension: 0.5,
