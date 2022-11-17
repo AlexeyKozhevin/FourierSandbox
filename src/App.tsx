@@ -194,8 +194,8 @@ const ViewPort = observer((): JSX.Element => {
     const context = useContext(AppContext)
     const [state, setState] = useState(0)
     return <>
-        <Plot nCoefs={state}/>
         <Slider min={0} max={context.func.nPoints / 2 - 1} onChange={(e: Event, value: any, activeThumb: number) => {setState(value)}}/>
+        <Plot nCoefs={state}/>
     </>
 })
 
