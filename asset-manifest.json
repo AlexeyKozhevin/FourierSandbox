@@ -1,15 +1,15 @@
 {
   "files": {
     "main.css": "/FourierSandbox/static/css/main.073c9b0a.css",
-    "main.js": "/FourierSandbox/static/js/main.10c8271c.js",
+    "main.js": "/FourierSandbox/static/js/main.cde01343.js",
     "static/js/787.9bdaaf47.chunk.js": "/FourierSandbox/static/js/787.9bdaaf47.chunk.js",
     "index.html": "/FourierSandbox/index.html",
     "main.073c9b0a.css.map": "/FourierSandbox/static/css/main.073c9b0a.css.map",
-    "main.10c8271c.js.map": "/FourierSandbox/static/js/main.10c8271c.js.map",
+    "main.cde01343.js.map": "/FourierSandbox/static/js/main.cde01343.js.map",
     "787.9bdaaf47.chunk.js.map": "/FourierSandbox/static/js/787.9bdaaf47.chunk.js.map"
   },
   "entrypoints": [
     "static/css/main.073c9b0a.css",
-    "static/js/main.10c8271c.js"
+    "static/js/main.cde01343.js"
   ]
 }
