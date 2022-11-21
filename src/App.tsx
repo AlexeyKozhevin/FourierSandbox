@@ -14,7 +14,7 @@ import {
   LogarithmicScale,
 } from 'chart.js'
 import { Chart } from 'react-chartjs-2'
-import { Complex, exp, complex, multiply, add, number} from "mathjs"
+import { Complex, exp, complex, multiply, add, abs, sqrt} from "mathjs"
 import { FormControl, FormControlLabel, FormLabel, Radio, RadioGroup, Slider, SliderThumb } from "@mui/material"
 import { fft } from "fft-js"
 import { jsx } from '@emotion/react';
@@ -38,22 +38,26 @@ class Function {
     right : number
     points : number[]
     values : number[]
+    frequency : number
 
     coefs : Record<number, Complex>
     approximations : Record<number, number[]>
 
-    constructor(func : (x : number) => number, left : number, right : number, nPoints : number) {
+    constructor(func : (x : number) => number, frequency : number, nPoints : number) {
         this.func = func
         this.nPoints = nPoints
-        this.left = left
-        this.right = right
+        this.left = - Math.PI
+        this.right = Math.PI
+        this.frequency = frequency
 
-        this.points = [...Array(nPoints).keys()].map((val) => val * (right - left) / nPoints + left)
+        const pointsPerInterval = nPoints * frequency
+
+        this.points = [...Array(pointsPerInterval).keys()].map((val) => (val % nPoints) * (this.right - this.left) / nPoints + this.left)
         this.values = this.points.map(func)
 
         this.coefs = Object.assign(
             {}, ...[...Array(this.nPoints).keys()].map(
-                (x) => ({[x - Math.floor(this.nPoints / 2)]: this.fourierCoeficient(x - Math.floor(this.nPoints / 2))})
+                (x) => ({[x - Math.floor(this.nPoints / 2)]: this.fourierCoefficient(x - Math.floor(this.nPoints / 2))})
             )
         )
 
@@ -65,8 +69,8 @@ class Function {
         for (let k=1; k < Math.floor(this.nPoints / 2); k++) {
             const harmonic_pos = this.fourierHarmonic(k)
             const harmonic_neg = this.fourierHarmonic(-k)
-            this.approximations[k] = [...Array(this.nPoints).keys()].map((x) =>
-                this.approximations[k-1][x] + harmonic_pos[x] + harmonic_neg[x]
+            this.approximations[k] = [...Array(pointsPerInterval).keys()].map((x) =>
+                this.approximations[k-1][x % nPoints] + harmonic_pos[x % nPoints] + harmonic_neg[x % nPoints]
             )
         }
 
@@ -76,7 +80,7 @@ class Function {
     //     console.log(fft(this.values))
     // }
 
-    fourierCoeficient(k : number) : Complex {
+    fourierCoefficient(k : number) : Complex {
         const L = this.right - this.left
         const delta = (this.right - this.left) / this.nPoints
         let coef : Complex = complex(0, 0)
@@ -84,6 +88,7 @@ class Function {
         for (const x of this.points) {
           let _coef = exp(complex(0, k * x * 2 * Math.PI / L))
           _coef = multiply(_coef, complex(this.func(x) * delta / L, 0)) as Complex // TODO: remove this.func
+          _coef = multiply(sqrt(1 / this.frequency), _coef) as Complex
           coef = add(coef, _coef)
         }
         return coef
@@ -91,7 +96,7 @@ class Function {
 
     fourierHarmonic(k : number) : number[] {
         return this.points.map((x) => {
-                return (multiply(this.coefs[k] as Complex, exp(complex(0, - k * x * 2 * Math.PI / (this.right - this.left)))) as Complex).re
+                return 1 / Math.sqrt(this.frequency) * (multiply(this.coefs[k] as Complex, exp(complex(0, - k * x * 2 * Math.PI / (this.right - this.left)))) as Complex).re
             })
     }
 }
@@ -109,7 +114,8 @@ export class AppContextType {
         makeObservable(this, {
             funcIndex : observable,
             func : observable,
-            setFunc : action
+            setFunc : action,
+            setFrequency : action
         })
 
         this.setFunc(0)
@@ -117,7 +123,11 @@ export class AppContextType {
 
     setFunc(funcIndex : number) {
         this.funcIndex = funcIndex
-        this.func = new Function(this.functions[funcIndex], -Math.PI, Math.PI, this.nPoints)
+        this.func = new Function(this.functions[funcIndex], 1, this.nPoints)
+    }
+
+    setFrequency(frequency : number) {
+        this.func = new Function(this.functions[this.funcIndex], frequency, this.nPoints)
     }
 }
 
@@ -139,16 +149,12 @@ export const AppContextProvider = (props: AppContextProps) : JSX.Element => {
 }
 
 function triangle(x : number) : number {
-    if (x < - Math.PI / 2) {
-        return 0
-    }
     if (x < 0) {
-        return x + Math.PI / 2
+        return x + Math.PI
     }
-    if (x <= Math.PI / 2) {
-        return Math.PI / 2 - x
+    else {
+        return Math.PI - x
     }
-    return 0
 }
 
 function square(x : number) : number {
@@ -192,12 +198,43 @@ function FunctionRadioGroup() {
         </FormControl>
 }
 
+const Sound = observer((): JSX.Element => {
+    const context = useContext(AppContext)
+
+    var audioContext = new AudioContext()
+    var gainNode = audioContext.createGain()
+    gainNode.gain.value = 0.1 // 10 %
+    gainNode.connect(audioContext.destination)
+
+    var o = audioContext.createOscillator()
+
+    const real = [...Array(context.func.nPoints / 2).keys()].map((x) => 2 * context.func.coefs[x].re)
+    const imag = [...Array(context.func.nPoints / 2).keys()].map((x) => - 2 * context.func.coefs[x].im)
+
+    const wave = new PeriodicWave(audioContext, {
+        real,
+        imag,
+        disableNormalization: false,
+      });
+
+    o.setPeriodicWave(wave)
+    o.connect(gainNode)
+
+    o.start(1)
+    o.stop(5)
+
+    return <>
+    </>
+})
+
 const ViewPort = observer((): JSX.Element => {
     const context = useContext(AppContext)
-    const [state, setState] = useState(0)
+    const [nCoefs, setNCoefs] = useState(0)
     return <>
-        <Slider min={0} max={context.func.nPoints / 2 - 1} onChange={(e: Event, value: any, activeThumb: number) => {setState(value)}}/>
-        <Plot nCoefs={state}/>
+        <Sound/>
+        <Slider min={1} max={10} onChange={(e: Event, value: any, activeThumb: number) => {context.setFrequency(value)}}/>
+        <Slider min={0} max={context.func.nPoints / 2 - 1} onChange={(e: Event, value: any, activeThumb: number) => {setNCoefs(value)}}/>
+        <Plot nCoefs={nCoefs}/>
     </>
 })
 
@@ -237,6 +274,11 @@ const Plot = observer((props : {nCoefs : number}): JSX.Element => {
                 data: coefsPoints.map(x => context.func.coefs[x].im),
                 label: "Im",
                 borderColor: "#ff0000",
+            },
+            {
+                data: coefsPoints.map(x => Math.pow(abs(context.func.coefs[x]), 2)),
+                label: "Energy",
+                borderColor: "#00ff00",
             }
         ]
     }
@@ -260,6 +302,7 @@ const Plot = observer((props : {nCoefs : number}): JSX.Element => {
             datasetIdKey='function'
             data={lineChartData}
             options={{animation: false,
+                borderWidth: 1, 
                 elements : {
                     point : {
                         radius : 0
@@ -289,7 +332,9 @@ const Plot = observer((props : {nCoefs : number}): JSX.Element => {
         <Line
             datasetIdKey='Coefs'
             data={coefsData}
-            options={{animation: false, elements : {
+            options={{animation: false, 
+                borderWidth: 1, 
+                elements : {
                 point : {
                     radius : 0
                 }},
@@ -307,6 +352,7 @@ const Plot = observer((props : {nCoefs : number}): JSX.Element => {
             datasetIdKey='Diff'
             data={diffData}
             options={{animation: false,
+                borderWidth: 0.5, 
                 elements : {
                     point : {
                         radius : 0
