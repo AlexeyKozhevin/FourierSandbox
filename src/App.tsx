@@ -1,6 +1,6 @@
 import './App.css';
 import { observer } from "mobx-react-lite"
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { Line } from "react-chartjs-2";
 import {
   Chart as ChartJS,
@@ -13,12 +13,10 @@ import {
   Legend,
   LogarithmicScale,
 } from 'chart.js'
-import { Chart } from 'react-chartjs-2'
-import { Complex, exp, complex, multiply, add, abs, sqrt} from "mathjs"
-import { FormControl, FormControlLabel, FormLabel, Radio, RadioGroup, Slider, SliderThumb } from "@mui/material"
-import { fft } from "fft-js"
-import { jsx } from '@emotion/react';
+import { Complex, exp, complex, multiply, add, abs } from "mathjs"
+import { FormControl, FormControlLabel, FormLabel, Radio, RadioGroup, Slider, Typography } from "@mui/material"
 import { action, makeObservable, observable } from 'mobx';
+import Grid from '@mui/material/Grid';
 
 ChartJS.register(
   CategoryScale,
@@ -50,9 +48,13 @@ class Function {
         this.right = Math.PI
         this.frequency = frequency
 
-        const pointsPerInterval = nPoints * frequency
+        
+        makeObservable(this, {
+            frequency : observable,
+            setFrequency : action
+        })
 
-        this.points = [...Array(pointsPerInterval).keys()].map((val) => (val % nPoints) * (this.right - this.left) / nPoints + this.left)
+        this.points = [...Array(nPoints).keys()].map((val) => val * (this.right - this.left) / nPoints + this.left)
         this.values = this.points.map(func)
 
         this.coefs = Object.assign(
@@ -63,22 +65,17 @@ class Function {
 
         this.approximations = {}
 
-        console.log('Compute approximations')
         this.approximations[0] = this.fourierHarmonic(0)
 
         for (let k=1; k < Math.floor(this.nPoints / 2); k++) {
             const harmonic_pos = this.fourierHarmonic(k)
             const harmonic_neg = this.fourierHarmonic(-k)
-            this.approximations[k] = [...Array(pointsPerInterval).keys()].map((x) =>
-                this.approximations[k-1][x % nPoints] + harmonic_pos[x % nPoints] + harmonic_neg[x % nPoints]
+            this.approximations[k] = [...Array(nPoints).keys()].map((x) =>
+                this.approximations[k-1][x] + harmonic_pos[x] + harmonic_neg[x]
             )
         }
 
     }
-
-    // fft() {
-    //     console.log(fft(this.values))
-    // }
 
     fourierCoefficient(k : number) : Complex {
         const L = this.right - this.left
@@ -88,7 +85,6 @@ class Function {
         for (const x of this.points) {
           let _coef = exp(complex(0, k * x * 2 * Math.PI / L))
           _coef = multiply(_coef, complex(this.func(x) * delta / L, 0)) as Complex // TODO: remove this.func
-          _coef = multiply(sqrt(1 / this.frequency), _coef) as Complex
           coef = add(coef, _coef)
         }
         return coef
@@ -96,8 +92,39 @@ class Function {
 
     fourierHarmonic(k : number) : number[] {
         return this.points.map((x) => {
-                return 1 / Math.sqrt(this.frequency) * (multiply(this.coefs[k] as Complex, exp(complex(0, - k * x * 2 * Math.PI / (this.right - this.left)))) as Complex).re
+                return (multiply(this.coefs[k] as Complex, exp(complex(0, - k * x * 2 * Math.PI / (this.right - this.left)))) as Complex).re
             })
+    }
+
+    getPoints() : [number[], number[]] {
+        const pointPerInterval = Math.ceil(this.nPoints * this.frequency)
+        const points = [...Array(pointPerInterval).keys()].map((val) => val * (this.right - this.left) / pointPerInterval + this.left)
+        const values = [...Array(pointPerInterval).keys()].map((val) => (val % this.nPoints) * (this.right - this.left) / this.nPoints + this.left).map((x) => this.func(x % this.nPoints))
+        return [points, values]
+    }
+
+    getApproximation(k: number) : number[] {
+        const pointPerInterval = Math.ceil(this.nPoints * this.frequency)
+        const values = [...Array(pointPerInterval).keys()].map((x) => this.approximations[k][x % this.nPoints])
+        return values
+    }
+
+    getCoefs() : Record<number, Complex> {
+        return this.coefs
+        // const nPoints = Math.ceil(this.nPoints * this.frequency)
+        // return Object.assign(
+        //     {}, ...[...Array(nPoints).keys()].map(
+        //         (x) => ({[x - Math.floor(nPoints / 2)]:
+        //             (x  - Math.floor(nPoints / 2)) % this.frequency === 0
+        //             ? this.coefs[(x - Math.floor(nPoints / 2)) / this.frequency]
+        //             : complex(0, 0)
+        //         })
+        //     )
+        // )
+    }
+
+    setFrequency(frequency : number) : void {
+        this.frequency = frequency
     }
 }
 
@@ -114,8 +141,7 @@ export class AppContextType {
         makeObservable(this, {
             funcIndex : observable,
             func : observable,
-            setFunc : action,
-            setFrequency : action
+            setFunc : action
         })
 
         this.setFunc(0)
@@ -123,11 +149,7 @@ export class AppContextType {
 
     setFunc(funcIndex : number) {
         this.funcIndex = funcIndex
-        this.func = new Function(this.functions[funcIndex], 1, this.nPoints)
-    }
-
-    setFrequency(frequency : number) {
-        this.func = new Function(this.functions[this.funcIndex], frequency, this.nPoints)
+        this.func = new Function(this.functions[funcIndex], this.func ? this.func.frequency : 1, this.nPoints)
     }
 }
 
@@ -158,13 +180,12 @@ function triangle(x : number) : number {
 }
 
 function square(x : number) : number {
-    if (x < - Math.PI / 2) {
+    if (x < 0) {
         return -Math.PI
     }
-    if (x <= Math.PI / 2) {
+    else {
         return Math.PI
     }
-    return 0
 }
 
 function linear(x : number) : number {
@@ -189,51 +210,85 @@ function FunctionRadioGroup() {
             name="radio-buttons-group"
             onChange={(event) => {context.setFunc(Number(event.target.value))}}
         >
+            <Grid alignItems="center">
             <FormControlLabel value='0' control={<Radio />} label="triangle" />
             <FormControlLabel value='1' control={<Radio />} label="square" />
             <FormControlLabel value='2' control={<Radio />} label="linear" />
             <FormControlLabel value='3' control={<Radio />} label="sin" />
             <FormControlLabel value='4' control={<Radio />} label="cos" />
+            </Grid>
         </RadioGroup>
         </FormControl>
 }
 
-const Sound = observer((): JSX.Element => {
-    const context = useContext(AppContext)
-
+function makeSound(coefs : any, nCoefs : number, frequency : number) {
     var audioContext = new AudioContext()
     var gainNode = audioContext.createGain()
-    gainNode.gain.value = 0.1 // 10 %
+    gainNode.gain.value = 0.02 // 10 %
     gainNode.connect(audioContext.destination)
 
     var o = audioContext.createOscillator()
 
-    const real = [...Array(context.func.nPoints / 2).keys()].map((x) => 2 * context.func.coefs[x].re)
-    const imag = [...Array(context.func.nPoints / 2).keys()].map((x) => - 2 * context.func.coefs[x].im)
+    const real = [...Array(nCoefs < 2 ? 2 : nCoefs).keys()].map((x) => 2 * coefs[x].re)
+    const imag = [...Array(nCoefs < 2 ? 2 : nCoefs).keys()].map((x) => - 2 * coefs[x].im)
+
+    console.log(real, imag)
 
     const wave = new PeriodicWave(audioContext, {
         real,
         imag,
         disableNormalization: false,
-      });
+    });
 
+    o.frequency.setValueAtTime(440 * frequency, audioContext.currentTime)
     o.setPeriodicWave(wave)
     o.connect(gainNode)
+    o.start(0)
+    o.stop(3)
+}
 
-    o.start(1)
-    o.stop(5)
+const Sound = observer((props: {nCoefs : number}): JSX.Element => {
+    const context = useContext(AppContext)
+    const nCoefs = props.nCoefs
+    const coefs = context.func.getCoefs()
 
-    return <>
-    </>
+    return <button onClick={() => {makeSound(coefs, nCoefs, context.func.frequency)}}> Sound </button>
 })
 
 const ViewPort = observer((): JSX.Element => {
     const context = useContext(AppContext)
-    const [nCoefs, setNCoefs] = useState(0)
+    const [nCoefs, setNCoefs] = useState(10)
+
     return <>
-        <Sound/>
-        <Slider min={1} max={10} onChange={(e: Event, value: any, activeThumb: number) => {context.setFrequency(value)}}/>
-        <Slider min={0} max={context.func.nPoints / 2 - 1} onChange={(e: Event, value: any, activeThumb: number) => {setNCoefs(value)}}/>
+        <Sound nCoefs={nCoefs}/>
+        <Grid container spacing={2} alignItems="center">
+            <Grid item xs={1.5}>
+                <Typography>
+                    Frequency: {Math.ceil(440 * context.func.frequency)} Hz
+                </Typography>
+            </Grid>
+            <Grid item xs={3}><Slider 
+                min={0.5} max={5} step={0.1}
+                defaultValue={1}
+                onChange={(e: Event, value: any, activeThumb: number) => {context.func.setFrequency(value)}}
+                valueLabelDisplay="auto"
+                valueLabelFormat={() => Math.ceil(440 * context.func.frequency) + ' Hz'}
+            /></Grid>
+        </Grid>
+        <Grid container spacing={3} alignItems="center">
+            <Grid  item xs={1.5}>
+                <Typography>
+                    Number of harmonics: {nCoefs}
+                </Typography>
+            </Grid>
+            <Grid item xs={3}>
+                <Slider
+                    min={0} max={context.func.nPoints / 2 - 1}
+                    value={nCoefs}
+                    valueLabelDisplay="auto"
+                    onChange={(e: Event, value: any, activeThumb: number) => {setNCoefs(value)}}/>
+            </Grid>
+        </Grid>
         <Plot nCoefs={nCoefs}/>
     </>
 })
@@ -241,18 +296,22 @@ const ViewPort = observer((): JSX.Element => {
 const Plot = observer((props : {nCoefs : number}): JSX.Element => {
     const context = useContext(AppContext)
 
+    const [points, values] = context.func.getPoints()
+    const approximation = context.func.getApproximation(props.nCoefs)
+    const coefs = context.func.getCoefs()
+
     const lineChartData = {
-        labels: context.func.points,
+        labels: points,
         datasets: [
             {
-                data: context.func.values,
+                data: values,
                 label: "Target function",
                 borderColor: "#3333ff",
                 fill: true,
                 lineTension: 0.5,
             },
             {
-                data: context.func.approximations[props.nCoefs],
+                data: approximation,
                 label: "Approximation",
                 borderColor: "#453456",
                 fill: true,
@@ -261,22 +320,22 @@ const Plot = observer((props : {nCoefs : number}): JSX.Element => {
         ],
     }
 
-    const coefsPoints = [...Object.keys(context.func.coefs)].sort((a, b) => Number(a) > Number(b) ? 1 : -1)
+    const coefsPoints = [...Object.keys(coefs)].sort((a, b) => Number(a) > Number(b) ? 1 : -1)
     const coefsData = {
         labels: coefsPoints,
         datasets: [
             {
-                data: coefsPoints.map(x => context.func.coefs[x].re),
+                data: coefsPoints.map(x => coefs[x].re),
                 label: "Re",
                 borderColor: "#0000ff",
             },
             {
-                data: coefsPoints.map(x => context.func.coefs[x].im),
+                data: coefsPoints.map(x => coefs[x].im),
                 label: "Im",
                 borderColor: "#ff0000",
             },
             {
-                data: coefsPoints.map(x => Math.pow(abs(context.func.coefs[x]), 2)),
+                data: coefsPoints.map(x => Math.pow(abs(coefs[x]), 2)),
                 label: "Energy",
                 borderColor: "#00ff00",
             }
@@ -284,11 +343,11 @@ const Plot = observer((props : {nCoefs : number}): JSX.Element => {
     }
 
     const diffData = {
-        labels: context.func.points,
+        labels: points,
         datasets: [
             {
-                data: [...Array(context.func.points.length).keys()].map(x => {
-                    return Math.abs(context.func.values[x] - context.func.approximations[props.nCoefs][x])
+                data: [...Array(points.length).keys()].map(x => {
+                    return Math.abs(values[x] - approximation[x])
                 }),
                 label: "Diff",
                 borderColor: "#0000ff",
@@ -308,13 +367,13 @@ const Plot = observer((props : {nCoefs : number}): JSX.Element => {
                         radius : 0
                     }},
                     scales: {
-                        x: {
-                            ticks: {
-                                callback: function (value, index, ticks) {
-                                    return Number(value).toFixed(2)
-                                }
-                            }
-                        },
+                        // x: {
+                        //     ticks: {
+                        //         callback: function (value, index, ticks) {
+                        //             return Number(value).toFixed(2)
+                        //         }
+                        //     }
+                        // },
                         y: {
                             max: 3.5,
                             min: -3.5,
