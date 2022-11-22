@@ -320,7 +320,7 @@ const Plot = observer((props : {nCoefs : number}): JSX.Element => {
         ],
     }
 
-    const coefsPoints = [...Object.keys(coefs)].sort((a, b) => Number(a) > Number(b) ? 1 : -1)
+    const coefsPoints = [...Array(2 * props.nCoefs).keys()].map((x) => x - props.nCoefs)
     const coefsData = {
         labels: coefsPoints,
         datasets: [
@@ -343,11 +343,11 @@ const Plot = observer((props : {nCoefs : number}): JSX.Element => {
     }
 
     const diffData = {
-        labels: points,
+        labels: context.func.points,
         datasets: [
             {
-                data: [...Array(points.length).keys()].map(x => {
-                    return Math.abs(values[x] - approximation[x])
+                data: [...Array(context.func.nPoints).keys()].map(x => {
+                    return Math.abs(context.func.approximations[props.nCoefs][x] - context.func.values[x])
                 }),
                 label: "Diff",
                 borderColor: "#0000ff",
